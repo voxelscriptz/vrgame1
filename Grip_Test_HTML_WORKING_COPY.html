@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Grip Test — Standalone HTML</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b12;color:#eef3ff;font:14px system-ui,Arial}
+#view{position:fixed;inset:0;width:100%;height:100%;display:block;background:#080b12}
+#panel{position:fixed;z-index:3;left:12px;top:12px;max-width:390px;width:calc(100% - 24px);padding:14px;background:#101827ed;border:1px solid #52627a;border-radius:13px;box-shadow:0 8px 35px #0007}
+h1{font-size:22px;margin:0 0 5px}p{color:#c6d1e4;line-height:1.4;margin:6px 0 10px}
+button{width:100%;padding:12px;margin:4px 0;border:0;border-radius:9px;background:#9dffca;color:#0d2018;font-weight:800;font-size:14px;cursor:pointer}
+#vr{background:#d8e5ff;color:#121927}#status{color:#9dffca;font-weight:800}#diag{font:12px ui-monospace,monospace;color:#c4d5ed;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:8px}
+#help{position:fixed;bottom:10px;left:10px;right:10px;text-align:center;color:#e7edf7;text-shadow:0 2px 4px #000;pointer-events:none;font-size:12px}
+#hide{width:auto;position:fixed;right:12px;top:12px;z-index:4;display:none;background:#ff7183}
+@media(max-height:600px){#panel{max-width:340px;padding:10px}h1{font-size:19px}p{font-size:12px}}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="panel">
+<h1>GRIP TEST</h1>
+<div id="status">Starting…</div>
+<p>Standalone HTML test arena. No Three.js, CDN, or external files required.</p>
+<button id="vr">Check support & enter VR</button>
+<button id="play">Start desktop game</button>
+<div id="diag">Initialising…</div>
+<p style="font-size:11px;margin-bottom:0">VR requires a compatible headset browser and an HTTPS page. A local HTML file can run the desktop game but may not be allowed to enter immersive VR.</p>
+</div>
+<button id="hide">Exit VR</button>
+<div id="help">Desktop: WASD / arrows to move · mouse or touch to look · Space to jump</div>
+<script>
+(function(){
+const canvas=document.getElementById('view'),ctx=canvas.getContext('2d');
+const panel=document.getElementById('panel'),status=document.getElementById('status'),diag=document.getElementById('diag');
+const vrBtn=document.getElementById('vr'),playBtn=document.getElementById('play'),hideBtn=document.getElementById('hide');
+let started=false, yaw=0,pitch=0,px=0,pz=0,py=0,vx=0,vz=0,vy=0,last=0,session=null;
+const keys={}; let pointer=false,lastX=0,lastY=0;
+function report(t){diag.textContent=t}
+function resize(){canvas.width=Math.max(1,innerWidth*devicePixelRatio);canvas.height=Math.max(1,innerHeight*devicePixelRatio);canvas.style.width=innerWidth+'px';canvas.style.height=innerHeight+'px';ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+addEventListener('resize',resize);resize();
+document.addEventListener('keydown',e=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+canvas.addEventListener('click',()=>{if(started&&canvas.requestPointerLock)canvas.requestPointerLock()});
+document.addEventListener('pointerlockchange',()=>pointer=document.pointerLockElement===canvas);
+document.addEventListener('mousemove',e=>{if(pointer){yaw+=e.movementX*.003;pitch=Math.max(-.6,Math.min(.6,pitch-e.movementY*.003))}});
+let touch=null;
+canvas.addEventListener('touchstart',e=>{if(e.touches.length){touch=[e.touches[0].clientX,e.touches[0].clientY]}},{passive:true});
+canvas.addEventListener('touchmove',e=>{if(touch&&e.touches.length){const t=e.touches[0];yaw+=(touch[0]-t.clientX)*.006;pitch=Math.max(-.6,Math.min(.6,pitch+(touch[1]-t.clientY)*.004));touch=[t.clientX,t.clientY]}},{passive:true});
+canvas.addEventListener('touchend',()=>touch=null);
+const blocks=[
+ [-2,0,-5,1.4,1.4,1.4,'#556276'],[0,0,-6,1.4,2,1.4,'#37465c'],[2.5,0,-4,1.6,1.1,1.6,'#56647a'],
+ [-4,0,-8,1.2,3.5,1.2,'#87364c'],[4,0,-8,1.2,3.5,1.2,'#2d5873'],[0,2,-10,3,.5,1.2,'#59677e'],
+ [-5,0,-2,1.4,1.4,1.4,'#45556b'],[5,0,-2,1.4,1.4,1.4,'#45556b'],
+ [-7,0,-6,.5,4,12,'#273447'],[7,0,-6,.5,4,12,'#273447'],[0,0,-12,14,4,.5,'#273447']
+];
+function project(x,y,z){
+ // World to camera coordinates, then perspective.
+ x-=px;y-=py+1.6;z-=pz;
+ const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+ const xx=x*cy-z*sy, zz=x*sy+z*cy;
+ const yy=y*cp-zz*sp, z2=y*sp+zz*cp;
+ if(z2>-.05)return null;
+ const f=Math.min(innerWidth,innerHeight)*.9;
+ return {x:innerWidth/2+xx*f/-z2,y:innerHeight/2-yy*f/-z2,z:-z2};
+}
+function polygon(points,color){
+ if(points.some(p=>!p))return;
+ ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.strokeStyle='#0b0f18';ctx.lineWidth=1;ctx.stroke();
+}
+function cube(b){
+ const [x,y,z,w,h,d,c]=b, x0=x-w/2,x1=x+w/2,y0=y,y1=y+h,z0=z-d/2,z1=z+d/2;
+ const pts=[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]];
+ const faces=[[0,1,2,3],[4,0,3,7],[1,5,6,2],[4,5,1,0],[3,2,6,7],[5,4,7,6]];
+ faces.map(f=>({f,depth:f.reduce((s,i)=>s+pts[i][2],0)/4})).sort((a,b)=>b.depth-a.depth).forEach(({f},i)=>{const shade=[-.12,-.28,.06,-.2,.12,-.05][i]||0;polygon(f.map(i=>project(...pts[i])),shadeColor(c,shade))});
+}
+function shadeColor(hex,amt){let n=parseInt(hex.slice(1),16),r=n>>16,g=(n>>8)&255,b=n&255;const k=amt>=0?255:0,a=Math.abs(amt);return `rgb(${Math.round(r+(k-r)*a)},${Math.round(g+(k-g)*a)},${Math.round(b+(k-b)*a)})`}
+function draw(){
+ const w=innerWidth,h=innerHeight;const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,'#101b30');g.addColorStop(.65,'#202b39');g.addColorStop(1,'#080b12');ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+ // Horizon and floor grid.
+ const horizon=project(0,0,-20)?.y||h*.55;ctx.strokeStyle='#46556b';ctx.lineWidth=1;
+ for(let i=-12;i<=12;i++){let a=project(i,0,-.5),b=project(i*2,0,-22);if(a&&b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}}
+ for(let j=1;j<14;j++){const z=-j*1.5;const a=project(-12,0,z),b=project(12,0,z);if(a&&b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}}
+ blocks.slice().sort((a,b)=>b[2]-a[2]).forEach(cube);
+ // Center reticle
+ ctx.strokeStyle='#d7e7ffb0';ctx.beginPath();ctx.moveTo(w/2-7,h/2);ctx.lineTo(w/2+7,h/2);ctx.moveTo(w/2,h/2-7);ctx.lineTo(w/2,h/2+7);ctx.stroke();
+ if(started&&!session){
+  const dt=Math.min(.04,(performance.now()-last)/1000||.016);last=performance.now();
+  const speed=4,fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);
+  let dx=0,dz=0;if(keys.KeyW||keys.ArrowUp){dx+=fx;dz+=fz}if(keys.KeyS||keys.ArrowDown){dx-=fx;dz-=fz}if(keys.KeyA||keys.ArrowLeft){dx-=rx;dz-=rz}if(keys.KeyD||keys.ArrowRight){dx+=rx;dz+=rz}
+  const l=Math.hypot(dx,dz)||1;vx+=(dx/l*speed-vx)*Math.min(1,dt*8);vz+=(dz/l*speed-vz)*Math.min(1,dt*8);
+  if(keys.Space&&py<=0.001)vy=4.8;vy-=9.8*dt;px+=vx*dt;pz+=vz*dt;py=Math.max(0,py+vy*dt);if(py===0)vy=0;
+ }
+ requestAnimationFrame(draw);
+}
+draw();
+playBtn.addEventListener('click',()=>{started=true;panel.style.display='none';last=performance.now();status.textContent='Desktop game running';});
+vrBtn.addEventListener('click',async()=>{
+ const lines=['Secure context: '+(isSecureContext?'YES':'NO'),'WebGL canvas: '+(ctx?'available':'unavailable'),'navigator.xr: '+(navigator.xr?'available':'missing')];
+ report(lines.join('\n'));status.textContent='Checking VR support…';
+ if(!isSecureContext){report(lines.concat(['','VR needs HTTPS. This HTML file can still run in desktop mode.']).join('\n'));status.textContent='VR requires HTTPS hosting';return}
+ if(!navigator.xr){report(lines.concat(['','Open this page in the headset browser, not a Drive preview.']).join('\n'));status.textContent='WebXR unavailable';return}
+ try{
+  const supported=await navigator.xr.isSessionSupported('immersive-vr');lines.push('immersive-vr supported: '+supported);
+  if(!supported){report(lines.concat(['','This browser/device does not support immersive VR.']).join('\n'));status.textContent='VR unsupported';return}
+  session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
+  // This simple standalone renderer does not pretend to provide stereo rendering if the browser grants a session.
+  await session.end();session=null;
+  lines.push('','The browser supports immersive VR, but this simple build uses a 2D canvas renderer and does not yet draw stereo VR.');
+  report(lines.join('\n'));status.textContent='VR detected; stereo renderer needed';
+ }catch(e){lines.push('','Error: '+e.name+': '+e.message);report(lines.join('\n'));status.textContent='VR failed — see details'}
+});
+hideBtn.addEventListener('click',()=>{if(session)session.end()});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gorilla Orbs VR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f2f4ff;--fg:#14183a;--card:#ffffffd9;--accent:#0a8f63;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0b1020;--fg:#e8ecff;--card:#141a38d9;--accent:#7cf5c0}}
+:root[data-theme="dark"]{--bg:#0b1020;--fg:#e8ecff;--card:#141a38d9;--accent:#7cf5c0}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+canvas{display:block}
+#ui{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+#card{pointer-events:auto;background:var(--card);backdrop-filter:blur(8px);border-radius:16px;padding:24px 28px;max-width:min(92vw,420px);text-align:center}
+h1{margin:0 0 8px;font-size:1.5rem}
+p{margin:6px 0;line-height:1.45;font-size:.95rem}
+button{margin-top:12px;font:inherit;font-weight:700;padding:12px 28px;border:0;border-radius:999px;background:var(--accent);color:#04120c;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+#msg{font-size:.85rem;opacity:.8}
+</style>
+</head>
+<body>
+<div id="ui"><div id="card">
+<h1>🦍 Gorilla Orbs</h1>
+<p>Swing your arms to move, like Gorilla Tag. Push off the ground, pillars and platforms with your hands — let go to launch yourself.</p>
+<p>Collect all 24 glowing orbs as fast as you can.</p>
+<button id="enter" disabled>Checking VR…</button>
+<p id="msg"></p>
+</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.xr.enabled=true;
+renderer.xr.setReferenceSpaceType('local-floor');
+document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0x2a1a5e,40,150);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.05,600);
+const rig=new THREE.Group();rig.add(camera);scene.add(rig);
+
+// ---- 360 sky ----
+(function(){
+  const c=document.createElement('canvas');c.width=1024;c.height=512;const g=c.getContext('2d');
+  const gr=g.createLinearGradient(0,0,0,512);
+  gr.addColorStop(0,'#090425');gr.addColorStop(.45,'#3a1b78');gr.addColorStop(.5,'#ff7ac8');gr.addColorStop(.56,'#3a1b78');gr.addColorStop(1,'#120a33');
+  g.fillStyle=gr;g.fillRect(0,0,1024,512);
+  for(let i=0;i<500;i++){g.fillStyle='rgba(255,255,255,'+(Math.random()*.8+.2)+')';g.fillRect(Math.random()*1024,Math.random()*220,1.5,1.5);}
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(400,32,16),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c),side:THREE.BackSide,fog:false}));
+  scene.add(sky);
+})();
+scene.add(new THREE.HemisphereLight(0xbfd4ff,0x44305a,1.0));
+const sun=new THREE.DirectionalLight(0xffd6f0,0.8);sun.position.set(20,40,10);scene.add(sun);
+
+// ---- ground ----
+(function(){
+  const c=document.createElement('canvas');c.width=c.height=128;const g=c.getContext('2d');
+  g.fillStyle='#2b2f66';g.fillRect(0,0,128,128);g.strokeStyle='#6f7cff';g.lineWidth=3;g.strokeRect(0,0,128,128);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(40,40);
+  const m=new THREE.Mesh(new THREE.CircleGeometry(60,64),new THREE.MeshLambertMaterial({map:t}));
+  m.rotation.x=-Math.PI/2;scene.add(m);
+})();
+
+// ---- arena ----
+const boxes=[];
+let seed=7;const rnd=()=>(seed=seed*16807%2147483647)/2147483647;
+function addBox(x,y,z,w,h,d,hue){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:new THREE.Color().setHSL(hue,.6,.55)}));
+  m.position.set(x,y+h/2,z);scene.add(m);
+  boxes.push(new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2)));
+}
+addBox(0,0,0,4,8,4,.6);
+for(let i=0;i<14;i++){const a=i/14*Math.PI*2,r=13+rnd()*3;addBox(Math.cos(a)*r,0,Math.sin(a)*r,1.6,2+rnd()*5,1.6,rnd());}
+for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.2,r=26+rnd()*6,h=3+rnd()*7;
+  addBox(Math.cos(a)*r,0,Math.sin(a)*r,1.4,h,1.4,rnd());
+  addBox(Math.cos(a)*r,h,Math.sin(a)*r,5,.6,5,rnd());}
+for(let i=0;i<8;i++){const a=i/8*Math.PI*2,r=42;addBox(Math.cos(a)*r,0,Math.sin(a)*r,2,10+rnd()*8,2,rnd());}
+for(let i=0;i<6;i++){addBox((rnd()-.5)*14,0,6+rnd()*8,2,.8+rnd()*1.2,2,rnd());}
+
+// ---- orbs ----
+const ORBS=24,orbs=[];
+const orbGeo=new THREE.IcosahedronGeometry(.25,1),orbMat=new THREE.MeshBasicMaterial({color:0x7cf5c0});
+function placeOrbs(){
+  for(let i=0;i<ORBS;i++){
+    let o=orbs[i];if(!o){o=new THREE.Mesh(orbGeo,orbMat);scene.add(o);orbs[i]=o;}
+    const a=rnd()*Math.PI*2,r=5+rnd()*38;
+    o.position.set(Math.cos(a)*r,1.5+rnd()*11,Math.sin(a)*r);o.visible=true;
+  }
+}
+placeOrbs();
+
+// ---- hands ----
+const HR=0.1;
+const hands=[0,1].map(i=>{
+  const c=renderer.xr.getController(i),grip=renderer.xr.getControllerGrip(i);
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(.07,16,12),new THREE.MeshLambertMaterial({color:0xffb46b}));
+  grip.add(mesh);rig.add(c);rig.add(grip);
+  const h={grip,mesh,gp:null,prev:new THREE.Vector3(),has:false,touch:false,hist:[]};
+  c.addEventListener('connected',e=>{h.gp=e.data.gamepad;mesh.material.color.set(e.data.handedness==='left'?0x6bb8ff:0xff7a7a);});
+  return h;
+});
+function buzz(h){try{h.gp&&h.gp.hapticActuators&&h.gp.hapticActuators[0].pulse(.6,40);}catch(e){}}
+
+// ---- HUD ----
+const hc=document.createElement('canvas');hc.width=512;hc.height=128;const hg=hc.getContext('2d');
+const hTex=new THREE.CanvasTexture(hc);
+const hud=new THREE.Mesh(new THREE.PlaneGeometry(.4,.1),new THREE.MeshBasicMaterial({map:hTex,transparent:true,depthTest:false}));
+hud.position.set(0,.3,-1);hud.renderOrder=99;camera.add(hud);
+let score=0,time=0,best=null,hudT=0;
+function drawHud(){
+  hg.clearRect(0,0,512,128);hg.fillStyle='rgba(10,10,40,.6)';hg.fillRect(0,0,512,128);
+  hg.fillStyle='#7cf5c0';hg.font='bold 48px sans-serif';hg.textAlign='center';
+  hg.fillText(score+'/'+ORBS+'  '+time.toFixed(1)+'s',256,60);
+  hg.font='28px sans-serif';hg.fillStyle='#fff';hg.fillText(best?'Best: '+best.toFixed(1)+'s':'Collect every orb!',256,105);
+  hTex.needsUpdate=true;
+}
+drawHud();
+
+// ---- physics ----
+const push=new THREE.Vector3(),cp=new THREE.Vector3(),dv=new THREE.Vector3(),tmp=new THREE.Vector3(),tmp2=new THREE.Vector3();
+const vel=new THREE.Vector3();
+function collide(p,r){
+  push.set(0,0,0);let hit=false;
+  if(p.y<r){push.y+=r-p.y;hit=true;}
+  for(const b of boxes){
+    cp.set(Math.max(b.min.x,Math.min(p.x,b.max.x)),Math.max(b.min.y,Math.min(p.y,b.max.y)),Math.max(b.min.z,Math.min(p.z,b.max.z)));
+    dv.subVectors(p,cp);const d2=dv.lengthSq();
+    if(d2<r*r){hit=true;if(d2>1e-8){const d=Math.sqrt(d2);push.addScaledVector(dv,(r-d)/d);}else push.y+=b.max.y-p.y+r;}
+  }
+  return hit;
+}
+function update(dt){
+  let touching=0,released=null;const move=new THREE.Vector3();
+  for(const h of hands){
+    if(!h.grip.visible){h.has=false;h.touch=false;continue;}
+    const cur=h.grip.position;
+    if(!h.has){h.prev.copy(cur);h.has=true;}
+    tmp.copy(cur).add(rig.position);
+    const hit=collide(tmp,HR);
+    if(hit){
+      move.add(tmp2.subVectors(h.prev,cur));touching++;
+      h.hist.push(tmp2.subVectors(cur,h.prev).divideScalar(dt));if(h.hist.length>6)h.hist.shift();
+      if(!h.touch)buzz(h);
+    }else if(h.touch)released=h;else h.hist.length=0;
+    h.touch=hit;h.prev.copy(cur);
+  }
+  if(touching){
+    rig.position.addScaledVector(move,1/touching);vel.set(0,0,0);
+    for(const h of hands)if(h.touch){tmp.copy(h.grip.position).add(rig.position);if(collide(tmp,HR))rig.position.add(push);}
+  }else{
+    if(released&&released.hist.length){
+      const s=new THREE.Vector3();released.hist.forEach(v=>s.add(v));s.divideScalar(released.hist.length);
+      vel.copy(s).multiplyScalar(-1.25);if(vel.length()>12)vel.setLength(12);released.hist.length=0;
+    }
+    vel.y-=9.8*dt;vel.multiplyScalar(1-.15*dt);rig.position.addScaledVector(vel,dt);
+  }
+  // head collision + floor
+  tmp.copy(camera.position).add(rig.position);
+  if(collide(tmp,.2)){rig.position.add(push);vel.multiplyScalar(.5);}
+  if(rig.position.y<0){rig.position.y=0;if(vel.y<0)vel.y=0;vel.x*=.9;vel.z*=.9;}
+  const r=Math.hypot(rig.position.x,rig.position.z);
+  if(r>56){rig.position.x*=56/r;rig.position.z*=56/r;}
+  // orbs
+  const pts=[tmp.copy(camera.position).add(rig.position).clone()];
+  for(const h of hands)if(h.grip.visible)pts.push(h.grip.position.clone().add(rig.position));
+  for(const o of orbs){if(!o.visible)continue;
+    for(const p of pts)if(p.distanceTo(o.position)<.5){o.visible=false;score++;hands.forEach(h=>h.touch&&buzz(h));break;}}
+  if(score>=ORBS){best=best?Math.min(best,time):time;score=0;time=0;placeOrbs();drawHud();}
+}
+function spawn(){rig.position.set(0,0,12);vel.set(0,0,0);}
+
+// ---- loop ----
+const clock=new THREE.Clock();let ang=0;
+renderer.setAnimationLoop(()=>{
+  const dt=Math.min(clock.getDelta(),.05)||.016;
+  orbs.forEach((o,i)=>{o.rotation.y+=dt*2;o.scale.setScalar(1+.15*Math.sin(performance.now()/300+i));});
+  if(renderer.xr.isPresenting){
+    update(dt);time+=dt;hudT+=dt;if(hudT>.2){hudT=0;drawHud();}
+    if(rig.position.y<-30)spawn();
+  }else{
+    ang+=dt*.15;rig.position.set(0,0,0);camera.position.set(Math.sin(ang)*22,9,Math.cos(ang)*22);camera.lookAt(0,4,0);
+  }
+  renderer.render(scene,camera);
+});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// ---- enter VR ----
+const btn=document.getElementById('enter'),msg=document.getElementById('msg'),ui=document.getElementById('ui');
+renderer.xr.addEventListener('sessionstart',()=>{ui.style.display='none';spawn();score=0;time=0;placeOrbs();drawHud();camera.position.set(0,1.6,0);});
+renderer.xr.addEventListener('sessionend',()=>{ui.style.display='flex';});
+(async()=>{
+  try{
+    if(!navigator.xr)throw 0;
+    if(!await navigator.xr.isSessionSupported('immersive-vr'))throw 0;
+    btn.textContent='Enter VR';btn.disabled=false;
+    btn.onclick=async()=>{
+      let s=null;
+      try{s=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});}
+      catch(e1){
+        try{s=await navigator.xr.requestSession('immersive-vr');renderer.xr.setReferenceSpaceType('local');}
+        catch(e2){msg.textContent='Could not start VR ('+(e2.name||'error')+': '+e2.message+'). If you are viewing this inside claude.ai, the embedded frame blocks VR - download the file and host it directly (see chat).';return;}
+      }
+      try{await renderer.xr.setSession(s);}catch(e3){msg.textContent='Session error: '+e3.message;}
+    };
+  }catch(e){btn.textContent='VR not available';msg.textContent='Open this page in the Meta Quest Browser (or another WebXR headset browser) over HTTPS.';}
+})();
+</script>
+</body>
+</html>

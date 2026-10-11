@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gorilla Orbs VR</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+window.__errs=[];
+window.addEventListener('error',function(e){window.__errs.push(e.message);var i=document.getElementById('info');if(i)i.innerHTML+='<br><span style="color:#ff9">Error: '+e.message+'</span>';});
+window.addEventListener('load',function(){var i=document.getElementById('info');if(!i)return;
+  if(typeof AFRAME==='undefined')i.innerHTML+='<br><span style="color:#ff9">A-Frame failed to load. Check your internet connection or ad blocker.</span>';
+  else window.__errs.forEach(function(m){i.innerHTML+='<br><span style="color:#ff9">Error: '+m+'</span>';});});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe.min.js"></script>
+<script>window.AFRAME||document.write('<script src="https://aframe.io/releases/1.5.0/aframe.min.js"><\/script>');</script>
+<script>window.AFRAME||document.write('<script src="https://unpkg.com/aframe@1.5.0/dist/aframe.min.js"><\/script>');</script>
+<script>window.AFRAME||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.5.0/aframe.min.js"><\/script>');</script>
+<script>window.AFRAME||document.write('<script src="aframe.min.js"><\/script>');</script>
+<style>
+html,body{margin:0;height:100%;background:#120a33}
+#info{position:fixed;top:10px;left:10px;right:10px;z-index:5;color:#fff;font:14px system-ui,sans-serif;background:#0009;padding:10px 14px;border-radius:10px;pointer-events:none;max-width:420px}
+</style>
+<script>
+const THREE=AFRAME.THREE;
+AFRAME.registerComponent('gorilla',{
+  init(){
+    const sc=this.el.object3D,boxes=this.boxes=[];
+    const tex=c=>{const t=new THREE.CanvasTexture(c);if(THREE.SRGBColorSpace)t.colorSpace=THREE.SRGBColorSpace;return t;};
+    // 360 sky
+    let c=document.createElement('canvas');c.width=1024;c.height=512;let g=c.getContext('2d');
+    const gr=g.createLinearGradient(0,0,0,512);
+    gr.addColorStop(0,'#090425');gr.addColorStop(.45,'#3a1b78');gr.addColorStop(.5,'#ff7ac8');gr.addColorStop(.56,'#3a1b78');gr.addColorStop(1,'#120a33');
+    g.fillStyle=gr;g.fillRect(0,0,1024,512);
+    for(let i=0;i<500;i++){g.fillStyle='rgba(255,255,255,'+(Math.random()*.8+.2)+')';g.fillRect(Math.random()*1024,Math.random()*220,1.5,1.5);}
+    sc.add(new THREE.Mesh(new THREE.SphereGeometry(400,32,16),new THREE.MeshBasicMaterial({map:tex(c),side:THREE.BackSide,fog:false})));
+    // ground
+    c=document.createElement('canvas');c.width=c.height=128;g=c.getContext('2d');
+    g.fillStyle='#2b2f66';g.fillRect(0,0,128,128);g.strokeStyle='#6f7cff';g.lineWidth=3;g.strokeRect(0,0,128,128);
+    const gt=tex(c);gt.wrapS=gt.wrapT=THREE.RepeatWrapping;gt.repeat.set(40,40);
+    const ground=new THREE.Mesh(new THREE.CircleGeometry(60,64),new THREE.MeshLambertMaterial({map:gt}));
+    ground.rotation.x=-Math.PI/2;sc.add(ground);
+    // arena
+    let seed=7;const rnd=()=>(seed=seed*16807%2147483647)/2147483647;
+    const addBox=(x,y,z,w,h,d,hue)=>{
+      const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color:new THREE.Color().setHSL(hue,.6,.55)}));
+      m.position.set(x,y+h/2,z);sc.add(m);
+      boxes.push(new THREE.Box3(new THREE.Vector3(x-w/2,y,z-d/2),new THREE.Vector3(x+w/2,y+h,z+d/2)));
+    };
+    addBox(0,0,0,4,8,4,.6);
+    for(let i=0;i<14;i++){const a=i/14*Math.PI*2,r=13+rnd()*3;addBox(Math.cos(a)*r,0,Math.sin(a)*r,1.6,2+rnd()*5,1.6,rnd());}
+    for(let i=0;i<10;i++){const a=i/10*Math.PI*2+.2,r=26+rnd()*6,h=3+rnd()*7;
+      addBox(Math.cos(a)*r,0,Math.sin(a)*r,1.4,h,1.4,rnd());addBox(Math.cos(a)*r,h,Math.sin(a)*r,5,.6,5,rnd());}
+    for(let i=0;i<8;i++){const a=i/8*Math.PI*2;addBox(Math.cos(a)*42,0,Math.sin(a)*42,2,10+rnd()*8,2,rnd());}
+    for(let i=0;i<6;i++)addBox((rnd()-.5)*14,0,6+rnd()*8,2,.8+rnd()*1.2,2,rnd());
+    // orbs
+    this.ORBS=24;this.orbs=[];this.rnd=rnd;
+    const og=new THREE.IcosahedronGeometry(.25,1),om=new THREE.MeshBasicMaterial({color:0x7cf5c0});
+    for(let i=0;i<this.ORBS;i++){const o=new THREE.Mesh(og,om);sc.add(o);this.orbs.push(o);}
+    this.placeOrbs();
+    // state
+    this.vel=new THREE.Vector3();this.push=new THREE.Vector3();
+    this.v1=new THREE.Vector3();this.v2=new THREE.Vector3();this.v3=new THREE.Vector3();this.v4=new THREE.Vector3();
+    this.score=0;this.time=0;this.best=null;this.hudT=0;
+    this.el.addEventListener('loaded',()=>{
+      this.rig=document.getElementById('rig').object3D;
+      this.camObj=document.getElementById('cam').object3D;
+      this.hud=document.getElementById('hud');
+      this.hands=['lh','rh'].map(id=>({el:document.getElementById(id),prev:new THREE.Vector3(),has:false,touch:false,hist:[]}));
+      this.drawHud();
+    });
+    this.el.addEventListener('enter-vr',()=>{
+      document.getElementById('info').style.display='none';
+      this.rig.position.set(0,0,12);this.vel.set(0,0,0);this.score=0;this.time=0;this.placeOrbs();
+    });
+    this.el.addEventListener('exit-vr',()=>{document.getElementById('info').style.display='block';});
+  },
+  placeOrbs(){
+    for(const o of this.orbs){const a=this.rnd()*Math.PI*2,r=5+this.rnd()*38;
+      o.position.set(Math.cos(a)*r,1.5+this.rnd()*11,Math.sin(a)*r);o.visible=true;}
+  },
+  drawHud(){
+    if(this.hud)this.hud.setAttribute('value',this.score+'/'+this.ORBS+'   '+this.time.toFixed(1)+'s\n'+(this.best?'Best '+this.best.toFixed(1)+'s':'Collect every orb!'));
+  },
+  buzz(h){try{const tc=h.el.components['tracked-controls'];tc.controller.gamepad.hapticActuators[0].pulse(.6,40);}catch(e){}},
+  collide(p,r){
+    const push=this.push,cp=this.v3,dv=this.v4;push.set(0,0,0);let hit=false;
+    if(p.y<r){push.y+=r-p.y;hit=true;}
+    for(const b of this.boxes){
+      cp.set(Math.max(b.min.x,Math.min(p.x,b.max.x)),Math.max(b.min.y,Math.min(p.y,b.max.y)),Math.max(b.min.z,Math.min(p.z,b.max.z)));
+      dv.subVectors(p,cp);const d2=dv.lengthSq();
+      if(d2<r*r){hit=true;if(d2>1e-8){const d=Math.sqrt(d2);push.addScaledVector(dv,(r-d)/d);}else push.y+=b.max.y-p.y+r;}
+    }
+    return hit;
+  },
+  tick(t,ms){
+    for(let i=0;i<this.orbs.length;i++){this.orbs[i].rotation.y+=.03;}
+    if(!this.hands||!this.el.is('vr-mode'))return;
+    const dt=Math.min(ms/1000,.05)||.016,rig=this.rig,vel=this.vel,tmp=this.v1,tmp2=this.v2;
+    let touching=0,released=null;const move=new THREE.Vector3(),HR=.1;
+    for(const h of this.hands){
+      const tc=h.el.components['tracked-controls'];
+      if(!tc||!tc.controller){h.has=false;h.touch=false;continue;}
+      const cur=h.el.object3D.position;
+      if(!h.has){h.prev.copy(cur);h.has=true;}
+      tmp.copy(cur).add(rig.position);
+      const hit=this.collide(tmp,HR);
+      if(hit){
+        move.add(tmp2.subVectors(h.prev,cur));touching++;
+        h.hist.push(tmp2.subVectors(cur,h.prev).divideScalar(dt).clone());if(h.hist.length>6)h.hist.shift();
+        if(!h.touch)this.buzz(h);
+      }else if(h.touch)released=h;else h.hist.length=0;
+      h.touch=hit;h.prev.copy(cur);
+    }
+    if(touching){
+      rig.position.addScaledVector(move,1/touching);vel.set(0,0,0);
+      for(const h of this.hands)if(h.touch){tmp.copy(h.el.object3D.position).add(rig.position);if(this.collide(tmp,HR))rig.position.add(this.push);}
+    }else{
+      if(released&&released.hist.length){
+        const s=new THREE.Vector3();released.hist.forEach(v=>s.add(v));s.divideScalar(released.hist.length);
+        vel.copy(s).multiplyScalar(-1.25);if(vel.length()>12)vel.setLength(12);released.hist.length=0;
+      }
+      vel.y-=9.8*dt;vel.multiplyScalar(1-.15*dt);rig.position.addScaledVector(vel,dt);
+    }
+    // head + floor
+    this.camObj.getWorldPosition(tmp);
+    if(this.collide(tmp,.2)){rig.position.add(this.push);vel.multiplyScalar(.5);}
+    if(rig.position.y<0){rig.position.y=0;if(vel.y<0)vel.y=0;vel.x*=.9;vel.z*=.9;}
+    const r=Math.hypot(rig.position.x,rig.position.z);
+    if(r>56){rig.position.x*=56/r;rig.position.z*=56/r;}
+    if(rig.position.y<-30){rig.position.set(0,0,12);vel.set(0,0,0);}
+    // orbs
+    const pts=[this.camObj.getWorldPosition(new THREE.Vector3())];
+    for(const h of this.hands)if(h.has)pts.push(h.el.object3D.position.clone().add(rig.position));
+    for(const o of this.orbs){if(!o.visible)continue;
+      for(const p of pts)if(p.distanceTo(o.position)<.5){o.visible=false;this.score++;this.hands.forEach(h=>h.touch&&this.buzz(h));break;}}
+    this.time+=dt;
+    if(this.score>=this.ORBS){this.best=this.best?Math.min(this.best,this.time):this.time;this.score=0;this.time=0;this.placeOrbs();}
+    this.hudT+=dt;if(this.hudT>.2){this.hudT=0;this.drawHud();}
+  }
+});
+</script>
+</head>
+<body>
+<div id="info"><b>🦍 Gorilla Orbs</b><br>Press the VR goggles button (bottom right) to enter. Push off surfaces with your hands to move, release to launch. Collect all 24 orbs.<br><i>On PC (preview only): drag to look, WASD to walk around.</i></div>
+<a-scene gorilla fog="type:linear;color:#2a1a5e;near:40;far:150" renderer="antialias:true" webxr="optionalFeatures:local-floor,bounded-floor" background="color:#120a33">
+  <a-entity light="type:hemisphere;color:#bfd4ff;groundColor:#44305a;intensity:1.4"></a-entity>
+  <a-entity light="type:directional;color:#ffd6f0;intensity:1.2" position="20 40 10"></a-entity>
+  <a-entity id="rig" position="0 0 12">
+    <a-entity id="cam" camera look-controls wasd-controls="acceleration:40" position="0 1.6 0">
+      <a-text id="hud" value="" align="center" color="#7cf5c0" width="1.6" position="0 0.3 -1"></a-text>
+    </a-entity>
+    <a-entity id="lh" oculus-touch-controls="hand:left"><a-sphere radius="0.07" color="#6bb8ff"></a-sphere></a-entity>
+    <a-entity id="rh" oculus-touch-controls="hand:right"><a-sphere radius="0.07" color="#ff7a7a"></a-sphere></a-entity>
+  </a-entity>
+</a-scene>
+</body>
+</html>

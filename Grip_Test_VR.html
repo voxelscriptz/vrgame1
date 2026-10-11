@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grip Test VR</title>
+<script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b16;font-family:Arial,sans-serif}
+  #panel{position:fixed;z-index:10;top:16px;left:50%;transform:translateX(-50%);width:min(92vw,520px);box-sizing:border-box;text-align:center;color:#fff;background:rgba(7,12,28,.9);border:1px solid #35d8ff;border-radius:18px;padding:14px 16px;box-shadow:0 0 24px #00aaff55}
+  #panel h1{font-size:22px;letter-spacing:2px;margin:0 0 5px}
+  #panel p{font-size:13px;line-height:1.4;margin:5px 0 10px;color:#c8d8f4}
+  button{border:0;border-radius:12px;background:linear-gradient(90deg,#00c8ff,#6b61ff);color:white;font-weight:bold;font-size:16px;padding:12px 20px;cursor:pointer}
+  #status{font-size:12px;color:#9cecff;margin-top:8px}
+  #desktopHint{position:fixed;z-index:9;bottom:14px;left:50%;transform:translateX(-50%);color:#fff;background:#080d20cc;padding:9px 13px;border-radius:10px;font-size:12px;text-align:center;max-width:90vw}
+  a-scene{height:100%;width:100%}
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>GRIP TEST</h1>
+  <p>Enter the arena. In VR, move your controller close to a glowing grip block and squeeze the controller's <b>Grip</b> button to crush it. Each block is worth 1 point.</p>
+  <button id="openVR">OPEN WITH VR</button>
+  <div id="status">Loading 3D arena…</div>
+</div>
+<div id="desktopHint">Desktop test: click a glowing block to crush it. For VR, open this page in the Meta Quest Browser over HTTPS.</div>
+
+<a-scene id="scene" background="color: #070b16"
+  renderer="antialias: true; colorManagement: true"
+  xr-mode-ui="enabled: false"
+  webxr="referenceSpaceType: local-floor; optionalFeatures: bounded-floor, hand-tracking">
+  <a-entity light="type: ambient; intensity: 0.9"></a-entity>
+  <a-entity light="type: directional; intensity: 1.3" position="-3 7 4"></a-entity>
+  <a-sky color="#070b16"></a-sky>
+  <a-plane rotation="-90 0 0" width="24" height="24" color="#111b35" position="0 0 0"></a-plane>
+  <a-entity id="grid" position="0 0.012 0"></a-entity>
+  <a-cylinder position="0 0.08 -3" radius="4.5" height="0.16" color="#17294b"></a-cylinder>
+  <a-torus position="0 0.18 -3" rotation="-90 0 0" radius="4.2" radius-tubular="0.035" color="#00d9ff"></a-torus>
+  <a-entity id="blocks"></a-entity>
+  <a-entity id="cameraRig" position="0 0 0">
+    <a-camera position="0 1.6 0" look-controls="pointerLockEnabled: false">
+      <a-entity cursor="rayOrigin: mouse" raycaster="objects: .grip-block" position="0 0 -1"
+        geometry="primitive: ring; radiusInner: 0.008; radiusOuter: 0.014"
+        material="color: #ffffff; shader: flat"></a-entity>
+    </a-camera>
+    <a-entity id="leftHand" laser-controls="hand: left" raycaster="objects: .grip-block; far: 5"
+      line="color: #00d9ff; opacity: 0.55"></a-entity>
+    <a-entity id="rightHand" laser-controls="hand: right" raycaster="objects: .grip-block; far: 5"
+      line="color: #a18bff; opacity: 0.55"></a-entity>
+  </a-entity>
+  <a-entity id="worldText" position="0 2.55 -3">
+    <a-text value="GRIP TEST ARENA" align="center" color="#eafaff" width="6" position="0 0 0"></a-text>
+    <a-text id="scoreText" value="SCORE: 0" align="center" color="#00e0ff" width="4" position="0 -0.35 0"></a-text>
+  </a-entity>
+</a-scene>
+
+<script>
+(() => {
+  const scene = document.querySelector('#scene');
+  const status = document.querySelector('#status');
+  const panel = document.querySelector('#panel');
+  const desktopHint = document.querySelector('#desktopHint');
+  const blocksRoot = document.querySelector('#blocks');
+  const scoreText = document.querySelector('#scoreText');
+  let score = 0, nextId = 0;
+  const colours = ['#00d9ff','#8c6bff','#ff3d9a','#ffbe3d','#5dffb1'];
+
+  // Decorative floor grid, created as lightweight thin boxes.
+  const grid = document.querySelector('#grid');
+  for (let i=-5;i<=5;i++) {
+    const a=document.createElement('a-box');
+    a.setAttribute('position',`${i*1.7} 0 ${-3-8.5}`);
+    a.setAttribute('width','0.018'); a.setAttribute('height','0.012'); a.setAttribute('depth','17');
+    a.setAttribute('color','#1b426b'); grid.appendChild(a);
+    const b=document.createElement('a-box');
+    b.setAttribute('position',`${-8.5} 0 ${-3+i*1.7}`);
+    b.setAttribute('width','17'); b.setAttribute('height','0.012'); b.setAttribute('depth','0.018');
+    b.setAttribute('color','#1b426b'); grid.appendChild(b);
+  }
+
+  function spawnBlock() {
+    const el=document.createElement('a-box');
+    const x=(Math.random()*5.2)-2.6;
+    const z=-1.3-Math.random()*4.1;
+    const y=0.45+Math.random()*1.05;
+    const size=0.34+Math.random()*0.22;
+    el.classList.add('grip-block');
+    el.dataset.id=String(nextId++);
+    el.setAttribute('position',`${x} ${y} ${z}`);
+    el.setAttribute('width',size); el.setAttribute('height',size); el.setAttribute('depth',size);
+    el.setAttribute('color',colours[Math.floor(Math.random()*colours.length)]);
+    el.setAttribute('material','emissive: #17304a; emissiveIntensity: 0.6; metalness: 0.25; roughness: 0.3');
+    el.setAttribute('animation__float',`property: position; dir: alternate; dur: ${1200+Math.random()*800}; easing: easeInOutSine; loop: true; to: ${x} ${y+0.12} ${z}`);
+    el.setAttribute('animation__spin',`property: rotation; to: 0 360 0; dur: ${5000+Math.random()*3000}; easing: linear; loop: true`);
+    el.addEventListener('click',()=>crush(el));
+    blocksRoot.appendChild(el);
+  }
+  function crush(el) {
+    if (!el || !el.parentNode || el.dataset.crushed) return;
+    el.dataset.crushed='1';
+    score++; scoreText.setAttribute('value','SCORE: '+score);
+    const pos=el.getAttribute('position');
+    const pop=document.createElement('a-text');
+    pop.setAttribute('value','+1'); pop.setAttribute('align','center');
+    pop.setAttribute('color','#ffffff'); pop.setAttribute('width','2');
+    pop.setAttribute('position',`${pos.x} ${pos.y+0.35} ${pos.z}`);
+    pop.setAttribute('animation','property: position; to: '+pos.x+' '+(pos.y+1)+' '+pos.z+'; dur: 650; easing: easeOutQuad');
+    scene.appendChild(pop); setTimeout(()=>pop.remove(),700);
+    el.remove(); setTimeout(spawnBlock,250);
+  }
+  for(let i=0;i<12;i++) spawnBlock();
+
+  function bindGrip(controller) {
+    // A-Frame tracked controller emits gripdown when the physical grip is squeezed.
+    controller.addEventListener('gripdown',()=>{
+      const hand=controller.object3D;
+      if (!hand) return;
+      let closest=null, best=1.15;
+      document.querySelectorAll('.grip-block').forEach(el=>{
+        const p=el.object3D.position.clone();
+        el.object3D.parent.localToWorld(p);
+        const hp=hand.getWorldPosition(new THREE.Vector3());
+        const d=hp.distanceTo(p);
+        if(d<best){best=d;closest=el;}
+      });
+      if(closest) crush(closest);
+    });
+    controller.addEventListener('triggerdown',()=>{
+      // Trigger can also select a block using the controller's laser ray.
+      const ray=controller.components.raycaster;
+      if(ray && ray.intersectedEls && ray.intersectedEls.length) crush(ray.intersectedEls[0]);
+    });
+  }
+  bindGrip(document.querySelector('#leftHand'));
+  bindGrip(document.querySelector('#rightHand'));
+
+  scene.addEventListener('loaded',()=>{status.textContent='Arena ready. Press OPEN WITH VR to enter immersive mode.';});
+  scene.addEventListener('enter-vr',()=>{
+    status.textContent='VR mode active — squeeze Grip near a block!';
+    panel.style.display='none'; desktopHint.style.display='none';
+  });
+  scene.addEventListener('exit-vr',()=>{
+    panel.style.display='block'; desktopHint.style.display='block';
+    status.textContent='Exited VR. Press OPEN WITH VR to re-enter.';
+  });
+  document.querySelector('#openVR').addEventListener('click',async()=>{
+    status.textContent='Requesting VR session…';
+    try {
+      if (!scene.hasLoaded) await new Promise(resolve=>scene.addEventListener('loaded',resolve,{once:true}));
+      if (!navigator.xr) {
+        status.textContent='WebXR is unavailable here. Open this page in the Meta Quest Browser from an HTTPS website.';
+        return;
+      }
+      const supported=await navigator.xr.isSessionSupported('immersive-vr');
+      if (!supported) {
+        status.textContent='This browser did not report immersive VR support. Try the Meta Quest Browser.';
+        return;
+      }
+      await scene.enterVR();
+    } catch(err) {
+      status.textContent='Could not enter VR: '+(err.message||err)+' — use Meta Quest Browser and an HTTPS-hosted page.';
+    }
+  });
+})();
+</script>
+</body>
+</html>

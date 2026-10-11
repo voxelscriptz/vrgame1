@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>Grip Test VR — A-Frame</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <style>
+    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080b12;font-family:system-ui,sans-serif}
+    #intro{position:fixed;z-index:20;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,#1b2638,#05070c);color:#eef3ff}
+    #panel{width:min(520px,calc(100vw - 34px));box-sizing:border-box;padding:24px;border:1px solid #52617a;background:#101725;border-radius:18px}
+    h1{margin:0 0 8px;font-size:28px}p{line-height:1.5;color:#c5d0e3}
+    button{width:100%;padding:13px 16px;margin:5px 0;border:0;border-radius:10px;background:#9dffca;color:#102019;font-weight:800;font-size:15px}
+    #status{white-space:pre-wrap;font:12px ui-monospace,monospace;color:#9dffca;overflow-wrap:anywhere}
+    .small{font-size:12px;color:#b9c5da}
+    #hint{position:fixed;z-index:5;left:12px;top:12px;max-width:340px;background:#101725dc;color:#eef3ff;padding:10px 12px;border-radius:10px;font:12px system-ui;pointer-events:none}
+  </style>
+</head>
+<body>
+  <div id="intro"><div id="panel">
+    <h1>GRIP TEST</h1>
+    <p>A tiny, dark VR collider arena built with A-Frame. The scene includes a floor, boundary walls, and blocks at different heights.</p>
+    <p><b>For Quest:</b> host this file on an HTTPS website, open it in Meta Quest Browser, then use the built-in Enter VR button at the bottom-right.</p>
+    <button id="desktop">Start desktop preview</button>
+    <div id="status">Loading A-Frame…</div>
+    <p class="small">This version uses A-Frame's built-in VR entry flow. Arm-push locomotion is experimental and will need controller testing.</p>
+  </div></div>
+  <div id="hint">Grip Test · WASD + mouse on desktop<br>VR: controller grip/trigger to push off surfaces (prototype)</div>
+
+  <a-scene id="scene" embedded background="color: #080b12"
+    renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true"
+    fog="type: exponential; color: #080b12; density: 0.025"
+    vr-mode-ui="enabled: true"
+    webxr="optionalFeatures: local-floor, bounded-floor, hand-tracking"
+    shadow="type: pcfsoft">
+    <a-entity light="type: hemisphere; color: #aab9d3; groundColor: #17111b; intensity: 1.1"></a-entity>
+    <a-entity light="type: point; color: #91b6ff; intensity: 2.2; distance: 24" position="0 5.5 1"></a-entity>
+    <a-entity light="type: point; color: #b51e35; intensity: 1.4; distance: 10" position="-5 2 -5"></a-entity>
+
+    <!-- Floor and room boundaries: static-body colliders from A-Frame physics is not bundled;
+         these are visual solids, and custom hand-push collision checks are below. -->
+    <a-box position="0 -0.25 0" width="24" height=".5" depth="24" color="#252b35" shadow></a-box>
+    <a-box position="0 1.4 -8" width="24" height="2.8" depth=".5" color="#303744"></a-box>
+    <a-box position="0 1.4 8" width="24" height="2.8" depth=".5" color="#303744"></a-box>
+    <a-box position="-8 1.4 0" width=".5" height="2.8" depth="16" color="#303744"></a-box>
+    <a-box position="8 1.4 0" width=".5" height="2.8" depth="16" color="#303744"></a-box>
+
+    <a-box class="solid" position="-2 .5 -2" width="1.4" height="1" depth="1.4" color="#4c5667" shadow></a-box>
+    <a-box class="solid" position=".2 .75 -3.5" width="1.2" height="1.5" depth="1.2" color="#303744" shadow></a-box>
+    <a-box class="solid" position="2.6 .4 -1.8" width="1.8" height=".8" depth="1.8" color="#4c5667" shadow></a-box>
+    <a-box class="solid" position="-3.2 1.1 -5" width="1.5" height="2.2" depth="1.5" color="#6b2838" shadow></a-box>
+    <a-box class="solid" position="3.6 1.5 -5.5" width="1.3" height="3" depth="1.3" color="#303744" shadow></a-box>
+    <a-box class="solid" position="0 2.2 -7" width="3.2" height=".5" depth="1.4" color="#4c5667" shadow></a-box>
+    <a-box class="solid" position="-5 .7 2" width="1.4" height="1.4" depth="1.4" color="#4c5667" shadow></a-box>
+    <a-box class="solid" position="5 .7 2" width="1.4" height="1.4" depth="1.4" color="#4c5667" shadow></a-box>
+
+    <a-entity id="rig" position="0 0 4">
+      <a-entity id="head" camera look-controls wasd-controls="enabled: false" position="0 1.65 0">
+        <a-cursor color="#9dffca" fuse="false" raycaster="objects: .solid"></a-cursor>
+      </a-entity>
+      <a-entity id="leftHand" hand-controls="hand: left; handModelStyle: lowPoly; color: #80caff" laser-controls="hand: left" grip-push="hand: left"></a-entity>
+      <a-entity id="rightHand" hand-controls="hand: right; handModelStyle: lowPoly; color: #ff647a" laser-controls="hand: right" grip-push="hand: right"></a-entity>
+    </a-entity>
+  </a-scene>
+<script>
+  const status = document.getElementById('status');
+  const intro = document.getElementById('intro');
+  const scene = document.getElementById('scene');
+  document.getElementById('desktop').addEventListener('click', () => {
+    intro.style.display = 'none';
+    scene.setAttribute('embedded', 'false');
+    status.textContent = 'Desktop preview active';
+  });
+  scene.addEventListener('loaded', () => {
+    status.textContent = 'A-Frame loaded. If Enter VR is visible, use it from an HTTPS page inside the headset.';
+    // Hide intro only when user enters VR or selects desktop mode.
+  });
+  scene.addEventListener('enter-vr', () => { intro.style.display = 'none'; });
+  scene.addEventListener('exit-vr', () => { intro.style.display = 'grid'; });
+
+  // Prototype Gorilla Tag-style push: controller/hand movement while grip is held
+  // shifts the rig in the opposite direction. Uses A-Frame's tracked controller entities.
+  AFRAME.registerComponent('grip-push', {
+    schema: { hand: {default:'left'} },
+    init: function() {
+      this.prev = null;
+      this.pressed = false;
+      this.rig = document.getElementById('rig');
+      this.onDown = () => { this.pressed = true; };
+      this.onUp = () => { this.pressed = false; };
+      this.el.addEventListener('gripdown', this.onDown);
+      this.el.addEventListener('triggerdown', this.onDown);
+      this.el.addEventListener('gripup', this.onUp);
+      this.el.addEventListener('triggerup', this.onUp);
+    },
+    tick: function() {
+      if (!this.el.object3D || !this.rig || !this.pressed) {
+        this.prev = this.el.object3D ? this.el.object3D.getWorldPosition(new THREE.Vector3()) : null;
+        return;
+      }
+      const world = this.el.object3D.getWorldPosition(new THREE.Vector3());
+      if (this.prev) {
+        const delta = world.clone().sub(this.prev);
+        const push = delta.multiplyScalar(-1);
+        if (push.length() > 0.16) push.setLength(0.16);
+        // Check hand position against nearby solid box bounds before applying push.
+        let touching = false;
+        document.querySelectorAll('.solid').forEach(el => {
+          const p = el.object3D.getWorldPosition(new THREE.Vector3());
+          const s = el.getAttribute('geometry');
+          const scale = el.object3D.scale;
+          const half = new THREE.Vector3((s.width || 1)*scale.x/2, (s.height || 1)*scale.y/2, (s.depth || 1)*scale.z/2);
+          if (Math.abs(world.x-p.x) < half.x+.12 && Math.abs(world.y-p.y) < half.y+.12 && Math.abs(world.z-p.z) < half.z+.12) touching = true;
+        });
+        if (touching) {
+          // Push opposite to hand motion; scene blocks are visually solid, collision is prototype-level.
+          this.rig.object3D.position.add(push);
+        }
+      }
+      this.prev = world.clone();
+    }
+  });
+</script>
+</body>
+</html>
